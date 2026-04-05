@@ -1,8 +1,43 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+  where,
+  limit,
+  arrayUnion,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
+
 const STORAGE_KEYS = {
-  boardPosts: "flipbook_board_posts_v1",
-  users: "flipbook_users_v1",
   currentUserId: "flipbook_current_user_id_v1",
 };
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDcvXbAGd3TQvzOLA_0qVIBXbU0XxwWn2g",
+  authDomain: "test-project-9-12aa8.firebaseapp.com",
+  projectId: "test-project-9-12aa8",
+  storageBucket: "test-project-9-12aa8.firebasestorage.app",
+  messagingSenderId: "402753026519",
+  appId: "1:402753026519:web:7ee58fe9c58fa62f907392",
+  measurementId: "G-3WGBVXT5MN",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const storage = getStorage(firebaseApp);
 
 const EGG_HINTS = [
   { id: "badge", name: "배지 연타", method: "상단 ROBLOX STYLE FLIPBOOK 배지를 5번 누르기", chance: "4.8%" },
@@ -176,8 +211,6 @@ const state = {
 function clamp(value, min, max) { return Math.min(Math.max(value, min), max); }
 function formatSeconds(seconds) { return Number.isFinite(seconds) ? seconds.toFixed(2) : "0.00"; }
 function formatDateTime(value) { return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
-function readJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } }
-function writeJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
 function createId(prefix) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 function sanitizeFileName(name) { return name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9-_가-힣]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "flipbook"; }
 function escapeHtml(value) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
@@ -195,19 +228,10 @@ async function hashPassword(password) {
 }
 
 function saveUsers() {
-  writeJson(STORAGE_KEYS.users, state.users);
   localStorage.setItem(STORAGE_KEYS.currentUserId, state.currentUserId || "");
 }
 
 function loadUsers() {
-  state.users = readJson(STORAGE_KEYS.users, []);
-  state.users = state.users.map((user) => ({
-    ...user,
-    discoveredEggIds: Array.isArray(user.discoveredEggIds) ? user.discoveredEggIds : [],
-    passwordHash: user.passwordHash || "",
-    legacyPassword: user.password || "",
-    password: "",
-  }));
   state.currentUserId = localStorage.getItem(STORAGE_KEYS.currentUserId) || "";
 }
 
@@ -297,17 +321,15 @@ async function loginOrSignup() {
   const user = {
     id: createId("user"),
     username,
+    usernameLower: username.toLowerCase(),
     passwordHash,
     createdAt: new Date().toISOString(),
     lastRenameAt: "",
     discoveredEggIds: [],
   };
-  state.users.push(user);
+  const docRef = await addDoc(collection(db, "users"), user);
   state.currentUserId = user.id;
   saveUsers();
-  renderAuthState();
-  renderEggHints();
-  renderBoard();
   showSecretToast(`${user.username} 계정 생성 및 로그인 완료`);
 }
 
@@ -320,7 +342,7 @@ function logout() {
   showSecretToast("로그아웃했습니다");
 }
 
-function renameCurrentUser() {
+async function renameCurrentUser() {
   const user = getCurrentUser();
   if (!user) {
     showSecretToast("먼저 로그인해 주세요");
@@ -352,20 +374,26 @@ function renameCurrentUser() {
   }
 
   const previousName = user.username;
-  user.username = nextName;
-  user.lastRenameAt = new Date().toISOString();
-  state.boardPosts.forEach((post) => {
-    if (post.ownerId === user.id) {
-      post.author = nextName;
-    }
-    post.comments.forEach((comment) => {
-      if (comment.ownerId === user.id) {
-        comment.author = nextName;
-      }
-    });
+  await updateDoc(doc(db, "users", user.docId), {
+    username: nextName,
+    usernameLower: nextName.toLowerCase(),
+    lastRenameAt: new Date().toISOString(),
   });
-  saveUsers();
-  saveBoardState();
+
+  const ownedPosts = state.boardPosts.filter((post) => post.ownerId === user.id);
+  await Promise.all(ownedPosts.map((post) => updateDoc(doc(db, "posts", post.docId), { author: nextName })));
+
+  const commentUpdateTasks = [];
+  state.boardPosts.forEach((post) => {
+    const nextComments = post.comments.map((comment) => (
+      comment.ownerId === user.id ? { ...comment, author: nextName } : comment
+    ));
+    if (JSON.stringify(nextComments) !== JSON.stringify(post.comments)) {
+      commentUpdateTasks.push(updateDoc(doc(db, "posts", post.docId), { comments: nextComments }));
+    }
+  });
+  await Promise.all(commentUpdateTasks);
+
   renderAuthState();
   renderEggHints();
   renderBoard();
@@ -638,10 +666,12 @@ function revealEggHint(id) {
   if (!user) {
     return false;
   }
-  if (!user.discoveredEggIds.includes(id)) {
-    user.discoveredEggIds.push(id);
-    saveUsers();
-    renderEggHints();
+  if (!user.discoveredEggIds.includes(id) && user.docId) {
+    updateDoc(doc(db, "users", user.docId), {
+      discoveredEggIds: arrayUnion(id),
+    }).catch((error) => {
+      console.error(error);
+    });
     return true;
   }
   return false;
@@ -941,11 +971,39 @@ async function handleDownloadGif() {
   downloadBlob(blob, `${sanitizeFileName(state.file.name)}-flipbook.gif`);
 }
 
-function loadBoardState() {
-  state.boardPosts = readJson(STORAGE_KEYS.boardPosts, []);
+function subscribeUsers() {
+  onSnapshot(query(collection(db, "users"), orderBy("createdAt", "asc")), (snapshot) => {
+    state.users = snapshot.docs.map((snapshotDoc) => ({
+      docId: snapshotDoc.id,
+      ...snapshotDoc.data(),
+      discoveredEggIds: Array.isArray(snapshotDoc.data().discoveredEggIds) ? snapshotDoc.data().discoveredEggIds : [],
+      passwordHash: snapshotDoc.data().passwordHash || "",
+      legacyPassword: "",
+    }));
+    if (state.currentUserId && !getCurrentUser()) {
+      state.currentUserId = "";
+      saveUsers();
+    }
+    renderAuthState();
+    renderEggHints();
+    renderBoard();
+  });
 }
 
-function saveBoardState() { writeJson(STORAGE_KEYS.boardPosts, state.boardPosts); }
+function subscribePosts() {
+  onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc")), (snapshot) => {
+    state.boardPosts = snapshot.docs.map((snapshotDoc) => ({
+      docId: snapshotDoc.id,
+      ...snapshotDoc.data(),
+      comments: Array.isArray(snapshotDoc.data().comments) ? snapshotDoc.data().comments : [],
+      media: Array.isArray(snapshotDoc.data().media) ? snapshotDoc.data().media : [],
+    }));
+    renderBoard();
+    if (!state.boardPosts.length) {
+      discoverEgg("boardempty", "빈 게시판");
+    }
+  });
+}
 
 function renderEggHints(showAll = false) {
   const user = getCurrentUser();
@@ -1073,6 +1131,21 @@ function readFilesAsDataUrls(fileList) {
   })));
 }
 
+async function uploadBoardMedia(files, postId) {
+  const uploads = await Promise.all(Array.from(files).map(async (file, index) => {
+    const safeName = sanitizeFileName(file.name || `media-${index}`);
+    const storageRef = ref(storage, `posts/${postId}/${Date.now()}-${safeName}`);
+    await uploadBytes(storageRef, file);
+    return {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      dataUrl: await getDownloadURL(storageRef),
+    };
+  }));
+  return uploads;
+}
+
 async function handleBoardSubmit() {
   const currentUser = getCurrentUser();
   if (!currentUser) {
@@ -1086,19 +1159,19 @@ async function handleBoardSubmit() {
   const files = Array.from(elements.boardMediaInput.files || []);
   if (files.length > 4) { showSecretToast("첨부는 최대 4개까지 가능합니다"); return; }
   if (files.some((file) => file.size > 2.5 * 1024 * 1024)) { showSecretToast("첨부 파일은 개당 2.5MB 이하로 올려주세요"); return; }
-  const media = files.length ? await readFilesAsDataUrls(files) : [];
-  state.boardPosts.unshift({
-    id: createId("post"),
+  const postId = createId("post");
+  const media = files.length ? await uploadBoardMedia(files, postId) : [];
+  await addDoc(collection(db, "posts"), {
+    id: postId,
     ownerId: currentUser.id,
     author: currentUser.username,
+    authorLower: currentUser.username.toLowerCase(),
     title,
     content,
-    createdAt: new Date().toISOString(),
+    createdAt: Date.now(),
     media,
     comments: [],
   });
-  saveBoardState();
-  renderBoard();
   elements.boardTitleInput.value = "";
   elements.boardContentInput.value = "";
   elements.boardMediaInput.value = "";
@@ -1114,9 +1187,10 @@ async function handleBoardSubmit() {
 
 function addSeedPosts() {
   if (state.boardPosts.length) { showSecretToast("이미 게시글이 있어 샘플은 넣지 않았습니다"); return; }
-  state.boardPosts = [...SEED_POSTS];
-  saveBoardState();
-  renderBoard();
+  Promise.all(SEED_POSTS.map((post) => addDoc(collection(db, "posts"), { ...post, createdAt: Date.now() - Math.floor(Math.random() * 100000) }))).catch((error) => {
+    console.error(error);
+    showSecretToast("샘플 글 업로드에 실패했습니다");
+  });
   discoverEgg("seed", "샘플 글 호출");
   showSecretToast("샘플 글을 넣었습니다");
 }
@@ -1146,11 +1220,11 @@ function handleBoardFeedClick(event) {
       showSecretToast("본인 글만 삭제할 수 있습니다");
       return;
     }
-    state.boardPosts = state.boardPosts.filter((item) => item.id !== post.id);
-    saveBoardState();
-    renderBoard();
+    deleteDoc(doc(db, "posts", post.docId)).catch((error) => {
+      console.error(error);
+      showSecretToast("게시글 삭제에 실패했습니다");
+    });
     showSecretToast("게시글을 삭제했습니다");
-    if (!state.boardPosts.length) { discoverEgg("boardempty", "빈 게시판"); }
   }
   if (event.target.matches("[data-submit-comment]")) {
     const currentUser = getCurrentUser();
@@ -1161,9 +1235,18 @@ function handleBoardFeedClick(event) {
     const contentInput = postCard.querySelector("[data-comment-content]");
     const content = moderateText(contentInput.value);
     if (!content) { showSecretToast("댓글 내용을 입력해 주세요"); return; }
-    post.comments.push({ id: createId("comment"), ownerId: currentUser.id, author: currentUser.username, content, createdAt: new Date().toISOString() });
-    saveBoardState();
-    renderBoard();
+    updateDoc(doc(db, "posts", post.docId), {
+      comments: arrayUnion({
+        id: createId("comment"),
+        ownerId: currentUser.id,
+        author: currentUser.username,
+        content,
+        createdAt: Date.now(),
+      }),
+    }).catch((error) => {
+      console.error(error);
+      showSecretToast("댓글 등록에 실패했습니다");
+    });
     showSecretToast("댓글이 등록됐습니다");
     discoverEgg("commenter", "댓글 작성");
     if (currentUser.username === "익명") { discoverEgg("nocommentname", "익명 댓글"); }
@@ -1299,8 +1382,9 @@ function attachEvents() {
 
 function initialize() {
   loadUsers();
-  loadBoardState();
   attachEvents();
+  subscribeUsers();
+  subscribePosts();
   updateSliderLabels();
   syncBackgroundControls();
   updateSheetStats();
@@ -1312,10 +1396,6 @@ function initialize() {
   clearSheetPreview("영상을 업로드하면 여기에서 플립북 시트를 볼 수 있습니다.");
   clearPlayerPreview("플립북 생성 후 영상처럼 재생해서 확인할 수 있습니다.");
   renderEggHints();
-  renderBoard();
-  if (!state.boardPosts.length) {
-    discoverEgg("boardempty", "빈 게시판");
-  }
 }
 
 initialize();
