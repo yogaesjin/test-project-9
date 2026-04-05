@@ -14,15 +14,10 @@ import {
   limit,
   arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import {
-  getStorage,
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
 
 const STORAGE_KEYS = {
   currentUserId: "flipbook_current_user_id_v1",
+  miniGameBest: "flipbook_mini_game_best_v1",
 };
 
 const firebaseConfig = {
@@ -37,7 +32,6 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
-const storage = getStorage(firebaseApp);
 
 const EGG_HINTS = [
   { id: "badge", name: "배지 연타", method: "상단 ROBLOX STYLE FLIPBOOK 배지를 5번 누르기", chance: "4.8%" },
@@ -56,7 +50,7 @@ const EGG_HINTS = [
   { id: "gif", name: "GIF 제작 완료", method: "GIF 다운로드 실행", chance: "7.1%" },
   { id: "metadata", name: "메타데이터 수집", method: "메타데이터 다운로드 실행", chance: "6.9%" },
   { id: "codepost", name: "코드 게시글", method: "코드가 포함된 게시글 작성", chance: "3.7%" },
-  { id: "mediapost", name: "미디어 게시글", method: "이미지나 영상 첨부 게시글 작성", chance: "5.3%" },
+  { id: "mediapost", name: "이미지 게시글", method: "이미지 첨부 게시글 작성", chance: "5.3%" },
   { id: "commenter", name: "댓글 작성", method: "아무 게시글에 댓글 달기", chance: "9.4%" },
   { id: "seed", name: "샘플 글 호출", method: "샘플 글 넣기 버튼 사용", chance: "10.2%" },
   { id: "search", name: "검색 키워드", method: "검색창에 lua/script/ui/flipbook/sprite 검색", chance: "5.9%" },
@@ -72,7 +66,6 @@ const EGG_HINTS = [
   { id: "partyoff", name: "시크릿 테마 종료", method: "활성화된 시크릿 테마를 다시 끄기", chance: "1.3%" },
   { id: "copypost", name: "게시글 복사", method: "게시글 내용 복사 버튼 사용", chance: "5.5%" },
   { id: "copycode", name: "코드 복사", method: "코드 게시글의 코드 복사 버튼 사용", chance: "2.9%" },
-  { id: "allmedia", name: "이미지+영상 동시 첨부", method: "한 게시글에 이미지와 영상 같이 첨부", chance: "1.0%" },
   { id: "nocommentname", name: "익명 댓글", method: "닉네임이 익명인 계정으로 댓글 작성", chance: "1.6%" },
   { id: "longpost", name: "장문 게시글", method: "아주 긴 게시글 작성", chance: "3.3%" },
   { id: "flipbookword", name: "제목 키워드", method: "게시글 제목에 flipbook 또는 sprite 넣기", chance: "3.9%" },
@@ -177,6 +170,13 @@ const elements = {
   eggProgressCard: document.getElementById("eggProgressCard"),
   remainingEggsList: document.getElementById("remainingEggsList"),
   eggDetailCard: document.getElementById("eggDetailCard"),
+  miniGameStatus: document.getElementById("miniGameStatus"),
+  miniGameScore: document.getElementById("miniGameScore"),
+  miniGameTime: document.getElementById("miniGameTime"),
+  miniGameBest: document.getElementById("miniGameBest"),
+  miniGameStartButton: document.getElementById("miniGameStartButton"),
+  miniGameResetButton: document.getElementById("miniGameResetButton"),
+  miniGameGrid: document.getElementById("miniGameGrid"),
   secretToast: document.getElementById("secretToast"),
   fireworksLayer: document.getElementById("fireworksLayer"),
   sourceVideo: document.getElementById("sourceVideo"),
@@ -206,6 +206,14 @@ const state = {
   users: [],
   currentUserId: "",
   selectedEggId: "",
+  miniGameActive: false,
+  miniGameScore: 0,
+  miniGameTimeLeft: 15,
+  miniGameTarget: -1,
+  miniGameStreak: 0,
+  miniGameBest: 0,
+  miniGameTimerId: 0,
+  miniGameMoveId: 0,
 };
 
 function clamp(value, min, max) { return Math.min(Math.max(value, min), max); }
@@ -233,6 +241,7 @@ function saveUsers() {
 
 function loadUsers() {
   state.currentUserId = localStorage.getItem(STORAGE_KEYS.currentUserId) || "";
+  state.miniGameBest = Number(localStorage.getItem(STORAGE_KEYS.miniGameBest) || 0);
 }
 
 function showSecretToast(message) {
@@ -708,6 +717,109 @@ function launchFireworks() {
   }
 }
 
+function updateMiniGameUi() {
+  elements.miniGameScore.textContent = `${state.miniGameScore}점`;
+  elements.miniGameTime.textContent = `${Math.max(0, state.miniGameTimeLeft).toFixed(1)}초`;
+  elements.miniGameBest.textContent = `${state.miniGameBest}점`;
+  elements.miniGameStartButton.disabled = state.miniGameActive;
+  elements.miniGameGrid.classList.toggle("is-active", state.miniGameActive);
+  Array.from(elements.miniGameGrid.children).forEach((button, index) => {
+    button.classList.toggle("is-target", state.miniGameActive && index === state.miniGameTarget);
+  });
+}
+
+function renderMiniGameBoard() {
+  elements.miniGameGrid.innerHTML = Array.from({ length: 9 }, (_, index) => (
+    `<button class="mini-game-cell" type="button" data-cell-index="${index}" aria-label="칸 ${index + 1}"></button>`
+  )).join("");
+  updateMiniGameUi();
+}
+
+function stopMiniGame(resetScore = false, statusMessage = "") {
+  clearInterval(state.miniGameTimerId);
+  clearTimeout(state.miniGameMoveId);
+  state.miniGameTimerId = 0;
+  state.miniGameMoveId = 0;
+  state.miniGameActive = false;
+  state.miniGameTarget = -1;
+  state.miniGameStreak = 0;
+  if (resetScore) {
+    state.miniGameScore = 0;
+    state.miniGameTimeLeft = 15;
+    elements.miniGameStatus.textContent = statusMessage || "시작 버튼을 누르면 15초 동안 반짝이는 칸을 잡는 게임이 시작됩니다.";
+  } else {
+    elements.miniGameStatus.textContent = statusMessage || `게임 종료! 이번 점수는 ${state.miniGameScore}점입니다.`;
+  }
+  updateMiniGameUi();
+}
+
+function moveMiniGameTarget() {
+  if (!state.miniGameActive) {
+    return;
+  }
+  let nextIndex = Math.floor(Math.random() * 9);
+  if (nextIndex === state.miniGameTarget) {
+    nextIndex = (nextIndex + 1) % 9;
+  }
+  state.miniGameTarget = nextIndex;
+  updateMiniGameUi();
+  const nextDelay = Math.max(220, 620 - state.miniGameScore * 12);
+  clearTimeout(state.miniGameMoveId);
+  state.miniGameMoveId = setTimeout(moveMiniGameTarget, nextDelay);
+}
+
+function finishMiniGame() {
+  let statusMessage = `게임 종료! 이번 점수는 ${state.miniGameScore}점입니다.`;
+  if (state.miniGameScore > state.miniGameBest) {
+    state.miniGameBest = state.miniGameScore;
+    localStorage.setItem(STORAGE_KEYS.miniGameBest, String(state.miniGameBest));
+    statusMessage = `신기록 달성! 최고 점수 ${state.miniGameBest}점`;
+    launchFireworks();
+  }
+  stopMiniGame(false, statusMessage);
+}
+
+function startMiniGame() {
+  if (state.miniGameActive) {
+    return;
+  }
+  state.miniGameActive = true;
+  state.miniGameScore = 0;
+  state.miniGameTimeLeft = 15;
+  state.miniGameStreak = 0;
+  elements.miniGameStatus.textContent = "빛나는 칸을 빠르게 누르세요. 연속 적중 시 보너스가 붙습니다.";
+  moveMiniGameTarget();
+  updateMiniGameUi();
+  clearInterval(state.miniGameTimerId);
+  state.miniGameTimerId = setInterval(() => {
+    state.miniGameTimeLeft = Math.max(0, state.miniGameTimeLeft - 0.1);
+    updateMiniGameUi();
+    if (state.miniGameTimeLeft <= 0) {
+      finishMiniGame();
+    }
+  }, 100);
+}
+
+function handleMiniGameClick(event) {
+  const button = event.target.closest("[data-cell-index]");
+  if (!button || !state.miniGameActive) {
+    return;
+  }
+  const clickedIndex = Number(button.dataset.cellIndex);
+  if (clickedIndex === state.miniGameTarget) {
+    state.miniGameStreak += 1;
+    state.miniGameScore += state.miniGameStreak >= 4 ? 2 : 1;
+    elements.miniGameStatus.textContent = state.miniGameStreak >= 4 ? "연속 적중 보너스!" : "적중!";
+    moveMiniGameTarget();
+  } else {
+    state.miniGameStreak = 0;
+    state.miniGameScore = Math.max(0, state.miniGameScore - 1);
+    elements.miniGameStatus.textContent = "헛클릭! 다른 칸으로 이동했습니다.";
+    moveMiniGameTarget();
+  }
+  updateMiniGameUi();
+}
+
 function discoverEgg(id, message) {
   if (!isLoggedIn()) {
     return;
@@ -1049,7 +1161,7 @@ function filterPosts() {
 
 function renderMedia(media) {
   if (!media?.length) { return ""; }
-  return `<div class="post-media-grid">${media.map((item) => item.type.startsWith("image/") ? `<img src="${item.dataUrl}" alt="${escapeHtml(item.name)}">` : `<video src="${item.dataUrl}" controls preload="metadata"></video>`).join("")}</div>`;
+  return `<div class="post-media-grid">${media.map((item) => `<img src="${item.dataUrl}" alt="${escapeHtml(item.name)}">`).join("")}</div>`;
 }
 
 function renderCodeBlock(content) {
@@ -1125,25 +1237,47 @@ function renderBoard() {
 function readFilesAsDataUrls(fileList) {
   return Promise.all(Array.from(fileList).map((file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve({ name: file.name, type: file.type, size: file.size, dataUrl: reader.result });
+    reader.onload = () => resolve({
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      dataUrl: reader.result,
+    });
     reader.onerror = reject;
     reader.readAsDataURL(file);
   })));
 }
 
-async function uploadBoardMedia(files, postId) {
-  const uploads = await Promise.all(Array.from(files).map(async (file, index) => {
-    const safeName = sanitizeFileName(file.name || `media-${index}`);
-    const storageRef = ref(storage, `posts/${postId}/${Date.now()}-${safeName}`);
-    await uploadBytes(storageRef, file);
+function loadImageElement(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+}
+
+async function optimizeBoardImages(fileList) {
+  const loadedFiles = await readFilesAsDataUrls(fileList);
+  return Promise.all(loadedFiles.map(async (file) => {
+    const image = await loadImageElement(file.dataUrl);
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    const maxDimension = 960;
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.78);
     return {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      dataUrl: await getDownloadURL(storageRef),
+      name: file.name.replace(/\.[^.]+$/, "") + ".jpg",
+      type: "image/jpeg",
+      size: Math.round((dataUrl.length * 3) / 4),
+      width: canvas.width,
+      height: canvas.height,
+      dataUrl,
     };
   }));
-  return uploads;
 }
 
 async function handleBoardSubmit() {
@@ -1157,14 +1291,20 @@ async function handleBoardSubmit() {
   const content = moderateText(elements.boardContentInput.value);
   if (!title || !content) { showSecretToast("제목과 내용을 입력해 주세요"); return; }
   const files = Array.from(elements.boardMediaInput.files || []);
-  if (files.length > 4) { showSecretToast("첨부는 최대 4개까지 가능합니다"); return; }
-  if (files.some((file) => file.size > 2.5 * 1024 * 1024)) { showSecretToast("첨부 파일은 개당 2.5MB 이하로 올려주세요"); return; }
+  if (files.length > 2) { showSecretToast("이미지는 최대 2장까지 첨부할 수 있습니다"); return; }
+  if (files.some((file) => !file.type.startsWith("image/"))) { showSecretToast("이미지만 첨부할 수 있습니다"); return; }
+  if (files.some((file) => file.size > 4 * 1024 * 1024)) { showSecretToast("원본 이미지는 개당 4MB 이하로 올려주세요"); return; }
   const postId = createId("post");
-  const media = files.length ? await uploadBoardMedia(files, postId) : [];
+  const media = files.length ? await optimizeBoardImages(files) : [];
+  const totalMediaBytes = media.reduce((sum, item) => sum + (item.size || 0), 0);
+  if (totalMediaBytes > 700 * 1024) {
+    showSecretToast("이미지 용량이 너무 커요. 더 작은 이미지로 다시 시도해 주세요");
+    return;
+  }
   await addDoc(collection(db, "posts"), {
     id: postId,
     ownerId: currentUser.id,
-    author: currentUser.username,
+    author,
     authorLower: currentUser.username.toLowerCase(),
     title,
     content,
@@ -1177,9 +1317,6 @@ async function handleBoardSubmit() {
   elements.boardMediaInput.value = "";
   if (getCodePayload(content)) { discoverEgg("codepost", "코드 게시글"); }
   if (media.length) { discoverEgg("mediapost", "미디어 게시글"); }
-  if (media.some((item) => item.type.startsWith("image/")) && media.some((item) => item.type.startsWith("video/"))) {
-    discoverEgg("allmedia", "이미지+영상 동시 첨부");
-  }
   if (content.length >= 280) { discoverEgg("longpost", "장문 게시글"); }
   if (/flipbook|sprite/i.test(title)) { discoverEgg("flipbookword", "제목 키워드"); }
   showSecretToast(getCodePayload(content) ? "코드 게시글로 감지되어 접기 UI가 적용됐습니다" : "게시글이 올라갔습니다");
@@ -1367,6 +1504,9 @@ function attachEvents() {
       discoverEgg("search", "검색 키워드");
     }
   });
+  elements.miniGameStartButton.addEventListener("click", startMiniGame);
+  elements.miniGameResetButton.addEventListener("click", () => stopMiniGame(true));
+  elements.miniGameGrid.addEventListener("click", handleMiniGameClick);
   elements.boardFeed.addEventListener("click", handleBoardFeedClick);
   [elements.eggHintsList, elements.remainingEggsList].forEach((list) => {
     list.addEventListener("click", (event) => {
@@ -1383,6 +1523,7 @@ function attachEvents() {
 function initialize() {
   loadUsers();
   attachEvents();
+  renderMiniGameBoard();
   subscribeUsers();
   subscribePosts();
   updateSliderLabels();

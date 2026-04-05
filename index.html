@@ -315,7 +315,7 @@
           <div class="section-block compact">
             <div class="section-title-row">
               <strong>새 글 작성</strong>
-              <span>로컬 저장</span>
+              <span>실시간 공유</span>
             </div>
             <div class="controls-grid single">
               <label>
@@ -334,15 +334,43 @@
               </label>
 
               <label>
-                <span>이미지/영상 첨부</span>
-                <input id="boardMediaInput" type="file" accept="image/*,video/*" multiple>
+                <span>이미지 첨부</span>
+                <input id="boardMediaInput" type="file" accept="image/*" multiple>
               </label>
             </div>
             <div class="compose-toolbar">
               <button id="boardSubmitButton" class="primary-button" type="button">게시글 올리기</button>
               <button id="boardSeedButton" class="ghost-button" type="button">샘플 글 넣기</button>
             </div>
-            <p class="hint compact">간단 검열이 적용됩니다. 큰 파일은 브라우저 저장 한계 때문에 업로드가 거절될 수 있습니다.</p>
+            <p class="hint compact">간단 검열이 적용됩니다. 게시판 영상 저장은 끄고, 이미지는 자동으로 줄여서 최대 2장까지 실시간 공유됩니다.</p>
+          </div>
+
+          <div class="section-block compact mini-game-panel">
+            <div class="section-title-row">
+              <strong>미니 게임</strong>
+              <span>스프라이트 캐처</span>
+            </div>
+            <div class="stats-card mini-game-status" id="miniGameStatus">시작 버튼을 누르면 15초 동안 반짝이는 칸을 잡는 게임이 시작됩니다.</div>
+            <div class="mini-game-stats">
+              <div class="stats-card">
+                <span>현재 점수</span>
+                <strong id="miniGameScore">0점</strong>
+              </div>
+              <div class="stats-card">
+                <span>남은 시간</span>
+                <strong id="miniGameTime">15.0초</strong>
+              </div>
+              <div class="stats-card">
+                <span>최고 점수</span>
+                <strong id="miniGameBest">0점</strong>
+              </div>
+            </div>
+            <div class="compose-toolbar">
+              <button id="miniGameStartButton" class="primary-button" type="button">게임 시작</button>
+              <button id="miniGameResetButton" class="ghost-button" type="button">초기화</button>
+            </div>
+            <div class="mini-game-grid" id="miniGameGrid" aria-label="스프라이트 캐처 게임판"></div>
+            <p class="hint compact">빛나는 칸을 빠르게 눌러 점수를 올리세요. 연속으로 맞히면 보너스가 붙습니다.</p>
           </div>
 
           <div class="section-block compact">
