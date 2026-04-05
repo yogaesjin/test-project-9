@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>플립북 시트 메이커</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div class="hero-topline">
+        <div class="hero-badge" id="heroBadge">ROBLOX STYLE FLIPBOOK</div>
+        <div class="hero-badge soft" id="timeNoticeBadge">커뮤니티 + 툴</div>
+      </div>
+      <h1>영상을 플립북 스프라이트시트로 변환</h1>
+      <p class="hero-copy">
+        영상을 업로드하고 프레임 수, 품질, 범위, 재생 방식을 세밀하게 조절한 뒤
+        로블록스 플립북처럼 한 장의 시트 이미지로 만들고 바로 재생해볼 수 있습니다.
+      </p>
+      <div class="hero-banner" id="timeBanner">오늘도 멋진 작업 해봅시다.</div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel controls-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">설정 패널</p>
+            <h2>출력 옵션</h2>
+          </div>
+          <div class="panel-chip">Sprite Sheet</div>
+        </div>
+
+        <label class="upload-dropzone" for="videoInput">
+          <input id="videoInput" type="file" accept="video/*">
+          <span class="upload-title">영상 업로드</span>
+          <span class="upload-subtitle">MP4, WebM, MOV 등 브라우저가 읽을 수 있는 영상</span>
+        </label>
+
+        <div class="video-meta" id="videoMeta">아직 영상이 선택되지 않았습니다.</div>
+
+        <div class="section-block">
+          <div class="section-title-row">
+            <strong>시트 레이아웃</strong>
+            <span>프레임 배치와 출력 크기</span>
+          </div>
+          <div class="controls-grid">
+            <label>
+              <span>가로 칸 수</span>
+              <input id="columnsInput" type="number" min="1" max="20" value="4">
+            </label>
+
+            <label>
+              <span>세로 칸 수</span>
+              <input id="rowsInput" type="number" min="1" max="20" value="4">
+            </label>
+
+            <label>
+              <span>기본 타일 크기(px)</span>
+              <input id="tileSizeInput" type="number" min="32" max="1024" step="16" value="256">
+            </label>
+
+            <label>
+              <span>타일 간격(px)</span>
+              <input id="gapInput" type="number" min="0" max="64" step="1" value="0">
+            </label>
+
+            <label>
+              <span>품질 배율</span>
+              <input id="qualityInput" type="range" min="0.25" max="2.5" step="0.05" value="1.2">
+              <strong id="qualityValue">1.20x</strong>
+            </label>
+
+            <label>
+              <span>채우기 방식</span>
+              <select id="fillModeInput">
+                <option value="contain">전체 보이기</option>
+                <option value="cover">꽉 채우기</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title-row">
+            <strong>프레임 범위</strong>
+            <span>영상 중 원하는 구간만 잘라서 사용</span>
+          </div>
+          <div class="controls-grid">
+            <label>
+              <span>시작 비율</span>
+              <input id="trimStartInput" type="range" min="0" max="95" step="1" value="0">
+              <strong id="trimStartValue">0%</strong>
+            </label>
+
+            <label>
+              <span>끝 비율</span>
+              <input id="trimEndInput" type="range" min="5" max="100" step="1" value="100">
+              <strong id="trimEndValue">100%</strong>
+            </label>
+
+            <label>
+              <span>프레임 순서</span>
+              <select id="frameOrderInput">
+                <option value="forward">정방향</option>
+                <option value="reverse">역방향</option>
+              </select>
+            </label>
+
+            <label>
+              <span>이미지 형식</span>
+              <select id="formatInput">
+                <option value="image/png">PNG</option>
+                <option value="image/webp">WebP</option>
+                <option value="image/jpeg">JPG</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title-row">
+            <strong>배경과 저장</strong>
+            <span>배경색과 압축 품질</span>
+          </div>
+          <div class="controls-grid">
+            <label>
+              <span>압축 품질</span>
+              <input id="compressionInput" type="range" min="0.4" max="1" step="0.05" value="0.96">
+              <strong id="compressionValue">0.96</strong>
+            </label>
+
+            <label>
+              <span>배경색</span>
+              <input id="backgroundInput" type="color" value="#000000">
+            </label>
+
+            <label>
+              <span>GIF 크기(px)</span>
+              <input id="gifSizeInput" type="number" min="128" max="1024" step="32" value="512">
+            </label>
+
+            <label>
+              <span>GIF 품질</span>
+              <input id="gifQualityInput" type="range" min="1" max="20" step="1" value="8">
+              <strong id="gifQualityValue">8</strong>
+            </label>
+          </div>
+
+          <label class="toggle-card" for="transparentInput">
+            <div>
+              <strong>투명 배경 사용</strong>
+              <p>PNG와 WebP에서 빈 영역을 투명하게 저장합니다. JPG는 자동으로 일반 배경색으로 저장됩니다.</p>
+            </div>
+            <input id="transparentInput" type="checkbox">
+          </label>
+        </div>
+
+        <div class="stats-card" id="sheetStats">예상 출력 크기: 1228 x 1228 / 총 프레임 16장</div>
+
+        <div class="actions">
+          <button id="generateButton" class="primary-button" type="button" disabled>플립북 생성</button>
+          <button id="downloadButton" class="ghost-button" type="button" disabled>이미지 다운로드</button>
+          <button id="gifButton" class="ghost-button" type="button" disabled>GIF 다운로드</button>
+          <button id="metadataButton" class="ghost-button" type="button" disabled>메타데이터 다운로드</button>
+        </div>
+
+        <p class="hint">
+          생성된 시트는 오른쪽 플레이어에서 바로 재생됩니다. Tween 미리보기를 켜면 프레임 사이를 부드럽게 섞어 영상처럼 확인할 수 있습니다.
+        </p>
+      </section>
+
+      <section class="panel preview-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">미리보기</p>
+            <h2>시트 + 플레이어</h2>
+          </div>
+          <div class="panel-chip">Preview</div>
+        </div>
+
+        <div class="preview-layout">
+          <div class="preview-card">
+            <div class="card-title-row">
+              <strong>스프라이트시트</strong>
+              <span id="sheetInfoLabel">대기 중</span>
+            </div>
+            <div class="preview-stage">
+              <canvas id="previewCanvas" width="1024" height="1024"></canvas>
+              <div class="preview-overlay" id="previewOverlay">생성된 플립북 시트가 여기에 표시됩니다.</div>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <div class="card-title-row">
+              <strong>플레이 미리보기</strong>
+              <span id="playerInfoLabel">재생 대기</span>
+            </div>
+            <div class="player-stage">
+              <canvas id="playerCanvas" width="512" height="512"></canvas>
+              <div class="player-overlay" id="playerOverlay">플립북 생성 후 영상처럼 재생해서 확인할 수 있습니다.</div>
+            </div>
+
+            <div class="player-controls">
+              <div class="player-buttons">
+                <button id="playButton" class="primary-button" type="button" disabled>재생</button>
+                <button id="resetButton" class="ghost-button" type="button" disabled>처음으로</button>
+              </div>
+
+              <div class="player-grid">
+                <label>
+                  <span>재생 FPS</span>
+                  <input id="playbackFpsInput" type="range" min="1" max="60" step="1" value="12">
+                  <strong id="playbackFpsValue">12 FPS</strong>
+                </label>
+
+                <label>
+                  <span>재생 배율</span>
+                  <input id="playerScaleInput" type="range" min="0.5" max="2" step="0.05" value="1">
+                  <strong id="playerScaleValue">1.00x</strong>
+                </label>
+              </div>
+
+              <label class="scrubber">
+                <span>프레임 스크럽</span>
+                <input id="frameScrubberInput" type="range" min="0" max="0" step="0.001" value="0" disabled>
+                <strong id="frameScrubberValue">0 / 0</strong>
+              </label>
+
+              <div class="toggle-grid">
+                <label class="mini-toggle" for="loopInput">
+                  <span>루프 재생</span>
+                  <input id="loopInput" type="checkbox" checked>
+                </label>
+
+                <label class="mini-toggle" for="pingPongInput">
+                  <span>핑퐁 재생</span>
+                  <input id="pingPongInput" type="checkbox">
+                </label>
+
+                <label class="mini-toggle" for="tweenPreviewInput">
+                  <span>Tween 미리보기</span>
+                  <input id="tweenPreviewInput" type="checkbox" checked>
+                </label>
+
+                <label class="mini-toggle" for="autoplayInput">
+                  <span>생성 후 자동 재생</span>
+                  <input id="autoplayInput" type="checkbox" checked>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="preview-details">
+          <div>
+            <span>출력 파일명</span>
+            <strong id="fileNameLabel">flipbook-sheet.png</strong>
+          </div>
+          <div>
+            <span>현재 상태</span>
+            <strong id="statusLabel">영상 대기 중</strong>
+          </div>
+        </div>
+
+        <video id="sourceVideo" class="hidden-video" preload="metadata" muted playsinline></video>
+      </section>
+    </main>
+
+    <section class="panel board-panel">
+      <div class="panel-head">
+        <div>
+          <p class="panel-kicker">게시글</p>
+          <h2>로블록스 개발 커뮤니티</h2>
+        </div>
+        <div class="panel-chip">Board</div>
+      </div>
+
+      <div class="board-layout">
+        <aside class="board-sidebar">
+          <div class="section-block compact">
+            <div class="section-title-row">
+              <strong>계정</strong>
+              <span id="authStatusLabel">로그아웃 상태</span>
+            </div>
+            <div class="controls-grid single">
+              <label>
+                <span>닉네임</span>
+                <input id="authUsernameInput" type="text" maxlength="24" placeholder="닉네임">
+              </label>
+              <label>
+                <span>비밀번호</span>
+                <input id="authPasswordInput" type="password" maxlength="40" placeholder="비밀번호">
+              </label>
+            </div>
+            <div class="compose-toolbar">
+              <button id="authLoginButton" class="primary-button" type="button">로그인 / 가입</button>
+              <button id="authLogoutButton" class="ghost-button" type="button">로그아웃</button>
+            </div>
+            <div class="controls-grid single top-gap">
+              <label>
+                <span>새 닉네임</span>
+                <input id="renameInput" type="text" maxlength="24" placeholder="24시간마다 변경 가능">
+              </label>
+            </div>
+            <div class="compose-toolbar">
+              <button id="renameButton" class="ghost-button" type="button">닉네임 변경</button>
+            </div>
+            <p class="hint compact" id="renameHint">로그인 후 닉네임을 24시간에 한 번만 바꿀 수 있습니다.</p>
+          </div>
+
+          <div class="section-block compact">
+            <div class="section-title-row">
+              <strong>새 글 작성</strong>
+              <span>로컬 저장</span>
+            </div>
+            <div class="controls-grid single">
+              <label>
+                <span>작성자</span>
+                <input id="boardAuthorInput" type="text" maxlength="24" placeholder="닉네임">
+              </label>
+
+              <label>
+                <span>제목</span>
+                <input id="boardTitleInput" type="text" maxlength="80" placeholder="예: UIGridLayout 성능 질문">
+              </label>
+
+              <label>
+                <span>내용</span>
+                <textarea id="boardContentInput" rows="7" placeholder="질문, 팁, 자료, 코드, 작업 일지 등을 올려보세요."></textarea>
+              </label>
+
+              <label>
+                <span>이미지/영상 첨부</span>
+                <input id="boardMediaInput" type="file" accept="image/*,video/*" multiple>
+              </label>
+            </div>
+            <div class="compose-toolbar">
+              <button id="boardSubmitButton" class="primary-button" type="button">게시글 올리기</button>
+              <button id="boardSeedButton" class="ghost-button" type="button">샘플 글 넣기</button>
+            </div>
+            <p class="hint compact">간단 검열이 적용됩니다. 큰 파일은 브라우저 저장 한계 때문에 업로드가 거절될 수 있습니다.</p>
+          </div>
+
+          <div class="section-block compact">
+            <div class="section-title-row">
+              <strong>이스터에그 도감</strong>
+              <span id="eggCountLabel">0개 발견</span>
+            </div>
+            <div class="stats-card" id="dailyEggHintCard">오늘의 힌트를 불러오는 중입니다.</div>
+            <div class="codex-stats">
+              <div class="stats-card" id="eggProgressCard">발견 0 / 남은 0</div>
+            </div>
+            <div class="stats-card" id="eggDetailCard">도감에서 이스터에그를 누르면 상세 정보가 표시됩니다.</div>
+            <div class="codex-columns">
+              <div>
+                <strong class="codex-heading">완료한 이스터에그</strong>
+                <ul class="egg-hints" id="eggHintsList"></ul>
+              </div>
+              <div>
+                <strong class="codex-heading">남아있는 이스터에그</strong>
+                <ul class="egg-hints" id="remainingEggsList"></ul>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="board-feed-wrap">
+          <div class="board-toolbar">
+            <div class="board-search">
+              <input id="boardSearchInput" type="text" placeholder="게시글 검색">
+            </div>
+            <div class="board-toolbar-meta" id="boardStatsLabel">게시글 0개</div>
+          </div>
+          <div class="board-feed" id="boardFeed"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="secret-toast" id="secretToast" aria-live="polite"></div>
+  <div class="fireworks-layer" id="fireworksLayer" aria-hidden="true"></div>
+
+  <script src="./app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
+</body>
+</html>
